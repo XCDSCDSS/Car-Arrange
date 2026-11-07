@@ -1,0 +1,26 @@
+*.iml
+.gradle
+/local.properties
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+.kotlin
+/.idea/deviceManager.xml
+/.idea/deploymentTargetSelector.xml
+# 백업 파일에는 실제 이름·전화번호가 들어 있음 → 절대 올리지 않음
+dispatch_backup_*.json
+# 개인 메모 (PC에만 두고 GitHub에는 올리지 않음)
+/CLAUDE.md
+/Claude Code로 배차 문자 앱 프로젝트 옮기기.md
+# 서명 키
+*.jks
+*.keystore

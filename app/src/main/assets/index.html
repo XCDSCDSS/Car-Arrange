@@ -1,0 +1,2022 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <!-- maximum-scale=1: 아이폰에서 입력칸을 누를 때 화면이 확대되는 것 방지 / viewport-fit=cover: 노치·홈 바 여백 계산 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <!-- 웹앱(홈 화면에 추가) 설정 -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-180.png">
+    <meta name="theme-color" content="#f5f5f7">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="차량요청">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>주성엔지니어링 배차 문자 생성기</title>
+    <style>
+        :root {
+            --canvas: #f5f5f7; --surface: #ffffff; --fg: #1d1d1f; --muted: #6e6e73;
+            --primary: #0071e3; --primary-hover: #0076df; --primary-press: #006edb;
+            --accent: #0071e3; --link: #0066cc;
+            --field: #f5f5f7; --line: rgba(0,0,0,0.12); --tint: rgba(0,113,227,0.10);
+            --danger: #ff3b30; --danger-tint: rgba(255,59,48,0.10); --danger-text: #d70015;
+            --bar: rgba(245,245,247,0.82); --seg-bg: rgba(118,118,128,0.12); --seg-on: #ffffff;
+            --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Apple SD Gothic Neo', 'Pretendard', 'Noto Sans KR', 'Roboto', 'Malgun Gothic', sans-serif;
+        }
+        html[data-theme="dark"] {
+            --canvas: #000000; --surface: #1d1d1f; --fg: #f5f5f7; --muted: #a1a1a6;
+            --accent: #2997ff; --link: #2997ff;
+            --field: #2c2c2e; --line: rgba(255,255,255,0.16); --tint: rgba(41,151,255,0.16);
+            --danger-tint: rgba(255,69,58,0.18); --danger-text: #ff6961;
+            --bar: rgba(29,29,31,0.82); --seg-bg: rgba(118,118,128,0.32); --seg-on: #636366;
+            color-scheme: dark;
+        }
+        html[data-theme="light"] { color-scheme: light; }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; background: var(--canvas); color: var(--fg); font-family: var(--font); font-size: 17px; line-height: 1.47; letter-spacing: -0.2px; -webkit-font-smoothing: antialiased; padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+
+        /* ---------- 아이콘 / 앱 아이콘 타일 ---------- */
+        .ic { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+        .tile { width: 36px; height: 36px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex: none; box-shadow: inset 0 0 0 0.5px rgba(0,0,0,0.10); }
+        .tile .ic { width: 22px; height: 22px; stroke-width: 1.9; }
+        .tile.sm { width: 28px; height: 28px; border-radius: 7px; }
+        .tile.sm .ic { width: 17px; height: 17px; }
+        .t-green  { background: linear-gradient(180deg, #67e07a, #26b848); }
+        .t-blue   { background: linear-gradient(180deg, #4db3ff, #0a6cf0); }
+        .t-orange { background: linear-gradient(180deg, #ffbd4a, #ff9500); }
+        .t-gray   { background: linear-gradient(180deg, #a8a8ad, #6b6b70); }
+        .t-purple { background: linear-gradient(180deg, #cf7bf5, #8e45dc); }
+        .t-indigo { background: linear-gradient(180deg, #7d7bf0, #4a48d6); }
+
+        /* ---------- 하단 탭바 ---------- */
+        .tab-bar { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: var(--bar); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-top: 0.5px solid var(--line); padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px)); z-index: 50; }
+        .tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 0; font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--muted); cursor: pointer; }
+        .tab .ic { width: 26px; height: 26px; }
+        .tab.active { color: var(--accent); }
+        .tab.active .ic { stroke-width: 2.2; }
+
+        /* ---------- 레이아웃 ---------- */
+        .container { display: flex; flex-direction: column; gap: 20px; padding: calc(16px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) 16px calc(16px + env(safe-area-inset-left, 0px)); max-width: 1000px; margin: 0 auto; }
+        @media (min-width: 768px) { .container { flex-direction: row; padding: 20px; } }
+        .section { display: none; width: 100%; flex-direction: column; gap: 12px; }
+        .section.active { display: flex; }
+        @media (min-width: 768px) {
+            .view-section { flex-direction: row; }
+            .form-column { flex: 1; }
+            .preview-column { flex: 1; }
+        }
+
+        .head { display: flex; align-items: center; gap: 12px; margin: 6px 0 14px; }
+        h2 { margin: 0; font-size: 28px; font-weight: 600; line-height: 1.2; letter-spacing: 0.2px; }
+        h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+        .preview-column h2 { margin: 6px 0 14px; }
+
+        /* ---------- 카드 / 폼 ---------- */
+        .field-group { background: var(--surface); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+        label { display: block; margin-bottom: 8px; font-size: 15px; font-weight: 600; }
+        .glabel { display: flex; align-items: center; gap: 10px; }
+        select, input, textarea { width: 100%; font-family: inherit; font-size: 17px; color: var(--fg); background-color: var(--field); border: 0; border-radius: 10px; letter-spacing: -0.2px; }
+        select, input { height: 44px; padding: 0 14px; }
+        select { -webkit-appearance: none; appearance: none; padding-right: 38px; background-repeat: no-repeat; background-position: right 14px center; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none' stroke='%238e8e93' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'><path d='M1 1.5l5 5 5-5'/></svg>"); }
+        input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.8; }
+        select:focus, input:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: 0; }
+        textarea { padding: 14px; line-height: 1.55; font-size: 15px; resize: none; }
+        #preview { height: 420px; background-color: var(--surface); }
+        .tpl-input { height: 300px; }
+        .custom-input { display: none; margin-top: 8px; gap: 8px; flex-direction: column; }
+        .hint { font-size: 13px; line-height: 1.4; color: var(--muted); margin-top: 8px; letter-spacing: -0.1px; }
+
+        .reqno-row { display: flex; gap: 8px; align-items: center; }
+        .reqno-prefix { flex: none; height: 44px; display: inline-flex; align-items: center; padding: 0 14px; border-radius: 10px; background: var(--field); font-weight: 600; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
+        .reqno-row input { flex: 1; }
+
+        /* ---------- 버튼 (알약형) ---------- */
+        button { white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 44px; padding: 0 21px; font-family: inherit; font-size: 17px; font-weight: 400; letter-spacing: -0.2px; color: #fff; background: var(--primary); border: 0; border-radius: 980px; cursor: pointer; transition: background 0.15s; }
+        button:hover { background: var(--primary-hover); }
+        button:active { background: var(--primary-press); }
+        button.btn-add { margin-top: 12px; }
+        button.btn-secondary { background: transparent; color: var(--link); box-shadow: inset 0 0 0 1px var(--link); }
+        button.btn-secondary:hover, button.btn-secondary:active { background: var(--tint); }
+        button.btn-tint { background: var(--tint); color: var(--link); }
+        button.btn-tint:hover, button.btn-tint:active { background: var(--tint); }
+        button.btn-destructive { background: transparent; color: var(--danger-text); box-shadow: inset 0 0 0 1px var(--danger); margin-top: 24px; }
+        button.btn-destructive:hover, button.btn-destructive:active { background: var(--danger-tint); }
+        button.btn-yes { background: var(--danger); }
+        button.btn-yes:hover, button.btn-yes:active { background: #e0352b; }
+        .btn-row { display: flex; gap: 10px; }
+        .btn-row button { width: auto; flex: 1; min-width: 0; }
+        .btn-row.tight button { font-size: 15px; padding: 0 8px; gap: 6px; }
+        .btn-row .btn-add { margin-top: 0; }
+        .btn-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+
+        /* 목록 안의 작은 버튼 (compact) */
+        .data-actions button { width: auto; flex: none; height: 32px; padding: 0 14px; font-size: 14px; }
+        button.btn-edit { background: var(--tint); color: var(--link); }
+        button.btn-edit:hover, button.btn-edit:active { background: var(--tint); }
+        button.btn-danger { background: var(--danger-tint); color: var(--danger-text); }
+        button.btn-danger:hover, button.btn-danger:active { background: var(--danger-tint); }
+        .data-actions button.btn-add { margin-top: 0; }
+
+        /* 칩 (템플릿 항목) */
+        .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+        button.chip { width: auto; height: 30px; padding: 0 12px; font-size: 13px; background: var(--tint); color: var(--link); }
+        button.chip:hover, button.chip:active { background: var(--tint); }
+
+        /* 세그먼트 컨트롤 */
+        .seg { background: var(--seg-bg); border-radius: 10px; padding: 2px; gap: 0; }
+        .seg button { background: transparent; color: var(--fg); height: 34px; padding: 0 4px; font-size: 14px; font-weight: 500; border-radius: 8px; gap: 5px; }
+        .seg button:hover, .seg button:active { background: transparent; }
+        .seg button.active { background: var(--seg-on); box-shadow: 0 1px 3px rgba(0,0,0,0.18); }
+        .seg .ic { width: 16px; height: 16px; }
+
+        /* ---------- 목록 ---------- */
+        .data-list { list-style: none; padding: 0; margin: 0; }
+        .data-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 0.5px solid var(--line); gap: 10px; }
+        .data-item:last-child { border-bottom: none; }
+        .data-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+        .data-title { font-weight: 600; font-size: 16px; }
+        .data-sub { font-size: 13px; color: var(--muted); }
+        .data-actions { display: flex; gap: 6px; }
+        .edit-row { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+        .edit-row input { height: 36px; font-size: 15px; }
+        .empty-li { padding: 12px 0; color: var(--muted); font-size: 15px; }
+
+        /* ---------- 선택 UI: 드롭다운(바텀시트) / 날짜(달력) / 시간(휠) ---------- */
+        .sel-wrap { position: relative; }
+        .sel-wrap::after { content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; cursor: pointer; }
+        .pick-field { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 44px; padding: 0 14px; border-radius: 10px; background: var(--field); font-size: 17px; letter-spacing: -0.2px; cursor: pointer; user-select: none; -webkit-user-select: none; }
+        .pick-field:active { opacity: 0.7; }
+        .pick-field .ic { color: var(--muted); }
+
+        .sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; justify-content: center; background: rgba(0,0,0,0); visibility: hidden; z-index: 900; transition: background 0.25s, visibility 0s linear 0.32s; }
+        .sheet-overlay.open { background: rgba(0,0,0,0.4); visibility: visible; transition: background 0.25s; }
+        .sheet-panel { width: 100%; max-width: 520px; max-height: 80vh; display: flex; flex-direction: column; background: var(--surface); border-radius: 20px 20px 0 0; padding: 8px 0 calc(16px + env(safe-area-inset-bottom, 0px)); transform: translateY(100%); transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1); }
+        .sheet-overlay.open .sheet-panel { transform: none; }
+        .sheet-grab { width: 36px; height: 5px; border-radius: 3px; background: var(--line); margin: 0 auto 8px; flex: none; }
+        .sheet-title { text-align: center; font-size: 17px; font-weight: 600; padding: 4px 20px 12px; flex: none; }
+        #sheetBody { overflow-y: auto; -webkit-overflow-scrolling: touch; }
+        .sheet-foot { display: flex; gap: 10px; padding: 14px 16px 0; }
+
+        button.sheet-row { display: flex; justify-content: space-between; width: 100%; height: 52px; padding: 0 20px; border-radius: 0; background: transparent; color: var(--fg); font-size: 17px; border-bottom: 0.5px solid var(--line); text-align: left; }
+        button.sheet-row:hover { background: transparent; }
+        button.sheet-row:active { background: var(--field); }
+        button.sheet-row.ph { color: var(--muted); }
+        button.sheet-row.new { color: var(--accent); }
+        button.sheet-row.sel { font-weight: 600; }
+        button.sheet-row .ic { color: var(--accent); width: 22px; height: 22px; stroke-width: 2.2; }
+
+        .wheels { position: relative; display: flex; height: 200px; margin: 0 20px; }
+        .wheels::before { content: ""; position: absolute; left: 0; right: 0; top: 80px; height: 40px; background: var(--field); border-radius: 10px; }
+        .wheel { position: relative; flex: 1; height: 200px; overflow-y: auto; scroll-snap-type: y mandatory; padding: 80px 0; scrollbar-width: none; -webkit-mask-image: linear-gradient(transparent, #000 28%, #000 72%, transparent); mask-image: linear-gradient(transparent, #000 28%, #000 72%, transparent); }
+        .wheel::-webkit-scrollbar { display: none; }
+        .wheel-item { height: 40px; line-height: 40px; text-align: center; font-size: 21px; color: var(--muted); scroll-snap-align: center; font-variant-numeric: tabular-nums; cursor: pointer; }
+        .wheel-item.on { color: var(--fg); font-weight: 600; }
+
+        .cal-head { display: flex; align-items: center; justify-content: space-between; padding: 0 12px 6px; }
+        .cal-title { font-size: 17px; font-weight: 600; }
+        button.cal-nav { width: 40px; height: 40px; padding: 0; border-radius: 50%; background: transparent; color: var(--accent); }
+        button.cal-nav:hover, button.cal-nav:active { background: var(--tint); }
+        .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px 0; padding: 0 12px; justify-items: center; }
+        .cal-wd { font-size: 13px; color: var(--muted); padding-bottom: 4px; }
+        .cal-wd span:first-child { color: var(--danger-text); }
+        button.cal-day { width: 42px; height: 42px; padding: 0; border-radius: 50%; background: transparent; color: var(--fg); font-size: 17px; font-variant-numeric: tabular-nums; }
+        button.cal-day:hover, button.cal-day:active { background: var(--tint); }
+        button.cal-day.sun { color: var(--danger-text); }
+        button.cal-day.today { color: var(--accent); font-weight: 700; }
+        button.cal-day.sel, button.cal-day.sel:hover { background: var(--primary); color: #fff; font-weight: 600; }
+
+        .t-teal { background: linear-gradient(180deg, #5ad8e6, #1fa5b8); }
+        .preset-wrap { margin: -4px 0 14px; }
+        .preset-label { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 2px 8px; }
+        .preset-bar { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+        .preset-bar::-webkit-scrollbar { display: none; }
+        button.preset-chip { display: block; flex: none; width: auto; max-width: 240px; height: 36px; line-height: 36px; padding: 0 16px; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--surface); color: var(--fg); }
+        button.preset-chip:hover { background: var(--surface); }
+        button.preset-chip:active { background: var(--tint); }
+        button.preset-chip.add { display: inline-flex; align-items: center; gap: 6px; line-height: normal; background: var(--tint); color: var(--link); }
+        button.preset-chip.add .ic { width: 16px; height: 16px; }
+        .t-red { background: linear-gradient(180deg, #ff6b60, #e5352b); }
+        #alertModal { z-index: 1100; }
+        #alertIcon { display: flex; justify-content: center; margin-bottom: 10px; }
+        #alertIcon:empty { display: none; }
+
+        /* ---------- 확인창 (예/아니오) ---------- */
+        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); align-items: center; justify-content: center; z-index: 1000; padding: 24px; }
+        .modal-box { background: var(--surface); color: var(--fg); border-radius: 18px; padding: 22px 20px 18px; width: 100%; max-width: 340px; }
+        .modal-title { font-size: 17px; font-weight: 600; text-align: center; margin-bottom: 6px; }
+        .modal-text { white-space: pre-line; font-size: 14px; color: var(--muted); text-align: center; line-height: 1.45; margin-bottom: 18px; }
+    </style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <symbol id="i-msg" viewBox="0 0 24 24"><path d="M12 3.6c-4.9 0-8.8 3.2-8.8 7.2 0 2.3 1.3 4.3 3.3 5.6-.2 1.2-.8 2.3-1.7 3.1 1.8-.1 3.5-.8 4.7-1.8.8.2 1.6.3 2.5.3 4.9 0 8.8-3.2 8.8-7.2S16.9 3.6 12 3.6z"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8.2" r="3.2"/><path d="M3 19.2c0-3.2 2.7-5.3 6-5.3s6 2.1 6 5.3"/><path d="M15.6 5.3a3 3 0 0 1 0 5.8"/><path d="M17.6 14.3c1.9.6 3.4 2.2 3.4 4.9"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.8-3.6 3.6-5.5 7-5.5s6.2 1.9 7 5.5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.8"/><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="8.2" stroke-width="2.4" stroke-dasharray="3.22 3.22"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2.5"/><path d="M15.5 8.5V6.5A2.5 2.5 0 0 0 13 4H6.5A2.5 2.5 0 0 0 4 6.5V13a2.5 2.5 0 0 0 2.5 2.5h2"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M21 3 10.5 13.5M21 3l-6.8 18-3.7-7.5L3 9.8z"/></symbol>
+    <symbol id="i-contact" viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="3"/><circle cx="12" cy="10" r="2.6"/><path d="M7.5 18c.6-2.2 2.4-3.4 4.5-3.4s3.9 1.2 4.5 3.4"/></symbol>
+    <symbol id="i-building" viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8h.01M12 8h.01M15 8h.01M9 12h.01M12 12h.01M15 12h.01M10 20.5v-4h4v4"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 5.5 19V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M14 3.5V8h4M8.5 12h7M8.5 15.5h7"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.2A8 8 0 1 1 9.8 4a6.5 6.5 0 0 0 10.2 10.2z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.8"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/></symbol>
+    <symbol id="i-auto" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4 3 19.5h18z"/><path d="M12 10v4.2M12 17h.01"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19.5h14"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19.5h14"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2.4"/><circle cx="18" cy="4" r="2.4"/><path d="M8.4 18H14a3.5 3.5 0 0 0 0-7h-4a3.5 3.5 0 0 1 0-7h5.6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="15" rx="3"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+</svg>
+
+<!-- 하단 탭바 -->
+<nav class="tab-bar">
+    <div class="tab active" onclick="switchTab('write')"><svg class="ic"><use href="#i-msg"/></svg><span>문자 작성</span></div>
+    <div class="tab" onclick="switchTab('manage')"><svg class="ic"><use href="#i-people"/></svg><span>데이터 관리</span></div>
+    <div class="tab" onclick="switchTab('settings')"><svg class="ic"><use href="#i-gear"/></svg><span>설정</span></div>
+</nav>
+
+<div class="container">
+
+    <!-- 1. 문자 작성 화면 -->
+    <div id="writeSection" class="section active view-section">
+        <div class="form-column">
+            <div class="head"><span class="tile t-green"><svg class="ic"><use href="#i-msg"/></svg></span><h2>배차 정보 입력</h2></div>
+            <div class="preset-wrap">
+                <div class="preset-label">자주 쓰는 경로</div>
+                <div class="preset-bar" id="presetBar"></div>
+            </div>
+            <div class="hint" id="requesterInfo" style="margin: -6px 0 14px 0;"></div>
+
+            <div class="field-group">
+                <label>1. 날짜 선택</label>
+                <input type="date" id="dateInput">
+            </div>
+
+            <div class="field-group">
+                <label>2. 차량 종류</label>
+                <select id="carType">
+                    <option value="퀵">퀵</option>
+                    <option value="정기차량">정기차량</option>
+                </select>
+            </div>
+
+            <div class="field-group">
+                <label>3. 배차 시간</label>
+                <input type="time" id="timeInput" value="10:00">
+            </div>
+
+            <div class="field-group">
+                <label>4. 출발지</label>
+                <select id="departSelect"><option value="">로딩 중...</option></select>
+                <div class="custom-input" id="departCustom">
+                    <input type="text" id="departName" placeholder="출발지 명칭">
+                    <input type="text" id="departAddr" placeholder="상세 주소">
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label>5. 보내는 사람</label>
+                <select id="sendPersonSelect"><option value="">먼저 출발지를 선택해주세요</option></select>
+                <div class="custom-input" id="sendPersonCustom">
+                    <input type="text" id="sendPersonName" placeholder="보내는 사람 이름/직급">
+                    <!-- 전화번호 자동 하이픈 적용 -->
+                    <input type="text" id="sendPersonPhone" placeholder="연락처 (숫자만 입력)" oninput="this.value = formatPhoneNumber(this.value); updatePreview();">
+                    <div class="hint">직접 입력한 인원은 복사/전송 시 선택한 출발지 소속으로 자동 저장됩니다.</div>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label>6. 도착지</label>
+                <select id="destSelect"><option value="">로딩 중...</option></select>
+                <div class="custom-input" id="destCustom">
+                    <input type="text" id="destName" placeholder="도착지 명칭">
+                    <input type="text" id="destAddr" placeholder="상세 주소">
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label>7. 받는 사람</label>
+                <select id="recvPersonSelect"><option value="">먼저 도착지를 선택해주세요</option></select>
+                <div class="custom-input" id="recvPersonCustom">
+                    <input type="text" id="recvPersonName" placeholder="받는 사람 이름/직급">
+                    <!-- 전화번호 자동 하이픈 적용 -->
+                    <input type="text" id="recvPersonPhone" placeholder="연락처 (숫자만 입력)" oninput="this.value = formatPhoneNumber(this.value); updatePreview();">
+                    <div class="hint">직접 입력한 인원은 복사/전송 시 선택한 도착지 소속으로 자동 저장됩니다.</div>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label>8. 요청번호</label>
+                <div class="reqno-row">
+                    <span class="reqno-prefix" id="reqNoPrefix">--------</span>
+                    <input type="text" id="reqNoSeq" inputmode="numeric" maxlength="4" placeholder="오늘 N번째 (예: 5)" oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                </div>
+                <div class="hint">앞 8자리는 오늘 날짜로 자동 입력됩니다. 오늘 몇 번째 요청인지만 입력하세요. (5 → 0005)</div>
+            </div>
+
+            <div class="field-group">
+                <label>9. 사유</label>
+                <select id="reasonSelect"></select>
+                <div class="custom-input" id="reasonCustom">
+                    <input type="text" id="reasonInput" placeholder="사유 입력 (예: 장비 반출)">
+                    <div class="hint">직접 입력한 사유는 복사/전송 시 자주 쓰는 사유로 자동 저장됩니다.</div>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label>10. Project No</label>
+                <input type="text" id="projectNo" placeholder="예: R-S3A214A0">
+            </div>
+        </div>
+
+        <div class="preview-column">
+            <h2>텍스트 문자 미리보기</h2>
+            <textarea id="preview" readonly></textarea>
+            <div class="btn-stack">
+                <button class="btn-tint" onclick="copyText()"><svg class="ic"><use href="#i-copy"/></svg>텍스트 복사하기</button>
+                <button onclick="sendToApp()"><svg class="ic"><use href="#i-send"/></svg>문자 앱으로 전송</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 데이터 관리 화면 -->
+    <div id="manageSection" class="section">
+        <div class="form-column">
+            <div class="head"><span class="tile t-blue"><svg class="ic"><use href="#i-building"/></svg></span><h2>장소 관리</h2></div>
+            <div class="field-group">
+                <label>새 장소 추가</label>
+                <input type="text" id="newLocName" placeholder="명칭 (예: 주성 용인 R&D 센터)" style="margin-bottom: 8px;">
+                <input type="text" id="newLocAddr" placeholder="상세 주소 (예: 경기도 용인시 기흥구...)">
+                <button class="btn-add" onclick="addLocation()"><svg class="ic"><use href="#i-plus"/></svg>장소 추가</button>
+            </div>
+
+            <div class="field-group">
+                <h3>저장된 장소 목록 (출발지/도착지)</h3>
+                <ul class="data-list" id="locationList"></ul>
+            </div>
+        </div>
+
+        <div class="form-column" style="margin-top: 20px;">
+            <div class="head"><span class="tile t-orange"><svg class="ic"><use href="#i-people"/></svg></span><h2>인원 관리</h2></div>
+            <div class="field-group">
+                <label>소속 장소 선택</label>
+                <select id="manageLocSelect" style="margin-bottom: 14px;"></select>
+
+                <label>새 인원 추가</label>
+                <input type="text" id="newPersonName" placeholder="이름/직급 (예: 짱구 사원)" style="margin-bottom: 8px;">
+                <!-- 전화번호 자동 하이픈 적용 -->
+                <input type="text" id="newPersonPhone" placeholder="연락처 (숫자만 입력)" oninput="this.value = formatPhoneNumber(this.value);">
+                <div class="btn-row tight" style="margin-top: 12px;">
+                    <button class="btn-add" onclick="addPerson()"><svg class="ic"><use href="#i-plus"/></svg>인원 추가</button>
+                    <button class="btn-tint" id="pickContactBtn" onclick="pickContact()"><svg class="ic"><use href="#i-contact"/></svg>연락처 가져오기</button>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <h3>해당 장소 소속 인원 목록 (보내는 사람/받는 사람)</h3>
+                <ul class="data-list" id="peopleList">
+                    <li class="empty-li">위에서 장소를 선택해주세요.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="form-column" style="margin-top: 20px;">
+            <div class="head"><span class="tile t-indigo"><svg class="ic"><use href="#i-route"/></svg></span><h2>경로 프리셋</h2></div>
+            <div class="field-group">
+                <h3>저장된 경로 (출발지 → 도착지)</h3>
+                <ul class="data-list" id="presetList"></ul>
+                <div class="hint">문자 작성 화면에서 출발지, 보내는 사람, 도착지, 받는 사람을 고른 뒤 '현재 경로 저장'을 누르면 여기에 추가돼요.</div>
+            </div>
+        </div>
+
+        <div class="form-column" style="margin-top: 20px;">
+            <div class="head"><span class="tile t-purple"><svg class="ic"><use href="#i-doc"/></svg></span><h2>사유 관리</h2></div>
+            <div class="field-group">
+                <label>새 사유 추가</label>
+                <input type="text" id="newReason" placeholder="예: 장비 반출">
+                <button class="btn-add" onclick="addReason()"><svg class="ic"><use href="#i-plus"/></svg>사유 추가</button>
+            </div>
+            <div class="field-group">
+                <h3>자주 쓰는 사유</h3>
+                <ul class="data-list" id="reasonList"></ul>
+                <div class="hint">맨 위의 사유가 문자 작성 화면에서 처음 선택돼요.</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 설정 화면 -->
+    <div id="settingsSection" class="section">
+        <div class="form-column">
+            <div class="head"><span class="tile t-gray"><svg class="ic"><use href="#i-gear"/></svg></span><h2>설정</h2></div>
+
+            <div class="field-group">
+                <label class="glabel"><span class="tile sm t-blue"><svg class="ic"><use href="#i-person"/></svg></span>내 정보 (요청자)</label>
+                <input type="text" id="senderNameInput" placeholder="이름/직급 (예: 철수 사원)" style="margin-bottom: 8px;">
+                <!-- 전화번호 자동 하이픈 적용 -->
+                <input type="text" id="senderPhoneInput" placeholder="내 연락처 (숫자만 입력)" oninput="this.value = formatPhoneNumber(this.value);">
+                <div class="hint">문자 첫 줄 "주성엔지니어링 OOO입니다"와 '요청자' 항목에 사용됩니다.</div>
+                <button class="btn-add" onclick="saveMyInfo()">저장</button>
+            </div>
+
+            <div class="field-group">
+                <label class="glabel"><span class="tile sm t-green"><svg class="ic"><use href="#i-msg"/></svg></span>배차 담당자 전화번호 (문자 수신처)</label>
+                <!-- 전화번호 자동 하이픈 적용 -->
+                <input type="text" id="dispatcherPhoneInput" placeholder="연락처 (숫자만 입력)" oninput="this.value = formatPhoneNumber(this.value);">
+                <div class="hint">앱 하단 '문자 앱으로 전송' 클릭 시 이 번호로 문자가 발송됩니다.</div>
+                <button class="btn-add" onclick="saveDispatcherPhone()">저장</button>
+            </div>
+
+            <div class="field-group">
+                <label class="glabel"><span class="tile sm t-purple"><svg class="ic"><use href="#i-doc"/></svg></span>문자 템플릿</label>
+                <div class="hint" style="margin: 0 0 10px 0;">항목을 누르면 커서 위치에 들어가고, 문자를 만들 때 자동으로 채워져요.</div>
+                <div class="chips">
+                    <button class="chip" onclick="insertPlaceholder('내이름')">{내이름}</button>
+                    <button class="chip" onclick="insertPlaceholder('요청번호')">{요청번호}</button>
+                    <button class="chip" onclick="insertPlaceholder('요청자')">{요청자}</button>
+                    <button class="chip" onclick="insertPlaceholder('날짜')">{날짜}</button>
+                    <button class="chip" onclick="insertPlaceholder('배차시간')">{배차시간}</button>
+                    <button class="chip" onclick="insertPlaceholder('차량종류')">{차량종류}</button>
+                    <button class="chip" onclick="insertPlaceholder('출발지')">{출발지}</button>
+                    <button class="chip" onclick="insertPlaceholder('보내는사람')">{보내는사람}</button>
+                    <button class="chip" onclick="insertPlaceholder('도착지')">{도착지}</button>
+                    <button class="chip" onclick="insertPlaceholder('받는사람')">{받는사람}</button>
+                    <button class="chip" onclick="insertPlaceholder('사유')">{사유}</button>
+                    <button class="chip" onclick="insertPlaceholder('프로젝트번호')">{프로젝트번호}</button>
+                </div>
+                <textarea id="templateInput" class="tpl-input" spellcheck="false"></textarea>
+                <div class="btn-row" style="margin-top: 12px;">
+                    <button class="btn-secondary" onclick="resetTemplate()">기본값으로</button>
+                    <button onclick="saveTemplate()">저장</button>
+                </div>
+            </div>
+
+            <div class="field-group">
+                <label class="glabel"><span class="tile sm t-teal"><svg class="ic"><use href="#i-download"/></svg></span>데이터 백업</label>
+                <div class="btn-row">
+                    <button class="btn-tint" onclick="exportBackup()"><svg class="ic"><use href="#i-download"/></svg>백업 저장</button>
+                    <button class="btn-tint" onclick="importBackup()"><svg class="ic"><use href="#i-upload"/></svg>백업 불러오기</button>
+                </div>
+                <input type="file" id="backupFile" accept=".json,application/json" style="display:none">
+                <div class="hint">장소, 인원, 경로 프리셋, 템플릿, 내 정보가 파일 하나로 저장돼요. 폰을 바꾸거나 앱을 지우기 전에 꼭 저장해두세요.</div>
+            </div>
+
+            <div class="field-group">
+                <label class="glabel"><span class="tile sm t-indigo"><svg class="ic"><use href="#i-moon"/></svg></span>화면 모드</label>
+                <div class="btn-row seg" id="themeSeg">
+                    <button data-mode="light" onclick="setThemeMode('light')"><svg class="ic"><use href="#i-sun"/></svg>라이트</button>
+                    <button data-mode="dark" onclick="setThemeMode('dark')"><svg class="ic"><use href="#i-moon"/></svg>다크</button>
+                    <button data-mode="system" onclick="setThemeMode('system')"><svg class="ic"><use href="#i-auto"/></svg>시스템</button>
+                </div>
+                <div class="hint">'시스템'은 폰의 다크 모드 설정을 따라갑니다.</div>
+            </div>
+
+            <button class="btn-destructive" onclick="resetDB()"><svg class="ic"><use href="#i-alert"/></svg>초기 데이터로 복구 (모든 설정 초기화)</button>
+        </div>
+    </div>
+
+    <!-- 선택 시트 (드롭다운 / 달력 / 시간 휠) -->
+    <div id="sheet" class="sheet-overlay" onclick="if (event.target === this) closeSheet()">
+        <div class="sheet-panel">
+            <div class="sheet-grab"></div>
+            <div class="sheet-title" id="sheetTitle"></div>
+            <div id="sheetBody"></div>
+        </div>
+    </div>
+
+    <!-- 알림창 (alert 대체, 확인 버튼 하나) -->
+    <div id="alertModal" class="modal-overlay" onclick="if (event.target === this) closeAlert()">
+        <div class="modal-box">
+            <div id="alertIcon"></div>
+            <div class="modal-title" id="alertTitle"></div>
+            <div class="modal-text" id="alertText"></div>
+            <button onclick="closeAlert()">확인</button>
+        </div>
+    </div>
+
+    <!-- 확인창 (예/아니오) -->
+    <div id="confirmModal" class="modal-overlay">
+        <div class="modal-box">
+            <div class="modal-title" id="modalTitle"></div>
+            <div class="modal-text" id="modalText"></div>
+            <div class="btn-row">
+                <button class="btn-secondary" onclick="closeConfirm()">아니오</button>
+                <button class="btn-yes" onclick="confirmYes()">예</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    // ==========================================
+    // 0. 공통 유틸리티 (전화번호 하이픈 자동완성)
+    // ==========================================
+    function formatPhoneNumber(str) {
+        // 숫자만 남기고 모두 제거
+        str = str.replace(/[^0-9]/g, '');
+
+        if (str.startsWith('02')) {
+            // 서울(02) 국번 처리
+            if (str.length < 3) return str;
+            if (str.length < 6) return str.substr(0, 2) + '-' + str.substr(2);
+            if (str.length < 10) return str.substr(0, 2) + '-' + str.substr(2, 3) + '-' + str.substr(5);
+            return str.substr(0, 2) + '-' + str.substr(2, 4) + '-' + str.substr(6, 4);
+        } else {
+            // 그 외 (010 등 일반 휴대폰/지역번호)
+            if (str.length < 4) return str;
+            if (str.length < 7) return str.substr(0, 3) + '-' + str.substr(3);
+            if (str.length < 11) return str.substr(0, 3) + '-' + str.substr(3, 3) + '-' + str.substr(6);
+            return str.substr(0, 3) + '-' + str.substr(3, 4) + '-' + str.substr(7, 4);
+        }
+    }
+
+
+    // ==========================================
+    // 1. 데이터 계층 (Storage API + DB)
+    // ==========================================
+    // ----- 네이티브 연결: 안드로이드(AndroidApp)와 iOS(WKWebView) 모두 이 창구로 호출 -----
+    // 앱이 아닌 일반 브라우저에서는 available()이 false → 각 기능이 대체 동작을 함
+    const Native = {
+        available(fn) {
+            if (window.AndroidApp && window.AndroidApp[fn]) return true;
+            return !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.native);
+        },
+        call(fn, ...args) {
+            if (window.AndroidApp && window.AndroidApp[fn]) return window.AndroidApp[fn](...args);
+            if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.native) {
+                window.webkit.messageHandlers.native.postMessage({ fn: fn, args: args });
+            }
+        }
+    };
+
+    const STORAGE_KEY = 'DISPATCH_APP_DB_V2';
+
+    const defaultLocationsRaw = {
+        "주성 용인 R&D 센터": "경기도 용인시 기흥구 신정로 79",
+        "주성 광주 본사": "경기도 광주시 오포읍 오포로 240",
+        "SK하이닉스 이천 Site": "경기도 이천시 경충대로 2091"
+    };
+
+    const defaultPeopleRaw = {
+        "주성 용인 R&D 센터": [ {name: "짱구 사원", phone: "010-8822-8694"} ],
+        "주성 광주 본사": [ {name: "철수 사원", phone: "010-2222-2222"} ],
+        "SK하이닉스 이천 Site": [ {name: "훈이 사원", phone: "010-4444-4444"} ],
+    };
+
+    function buildDefaultDB() {
+        const locations = {};
+        const people = {};
+        let locCounter = 1;
+        let personCounter = 1;
+
+        for (const [name, addr] of Object.entries(defaultLocationsRaw)) {
+            const locId = 'loc_' + (locCounter++);
+            locations[locId] = { name, addr };
+            (defaultPeopleRaw[name] || []).forEach(p => {
+                const personId = 'per_' + (personCounter++);
+                people[personId] = { locId, name: p.name, phone: p.phone };
+            });
+        }
+
+        return {
+            locations,
+            people,
+            presets: {},
+            reasons: ['파트 이동'],
+            settings: {
+                senderName: "철수 사원",
+                senderPhone: "",
+                dispatcherPhone: "",
+                themeMode: "system"
+            }
+        };
+    }
+
+    let idCounter = Date.now();
+    function generateId(prefix) {
+        idCounter += 1;
+        return prefix + '_' + idCounter.toString(36);
+    }
+
+    const StorageAPI = {
+        load() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                return JSON.parse(raw);
+            } catch (e) {
+                console.error('DB load failed, resetting.', e);
+                return null;
+            }
+        },
+        save(db) {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+                return true;
+            } catch (e) {
+                console.error('DB save failed.', e);
+                alert('데이터 저장에 실패했습니다. 저장 공간을 확인해주세요.');
+                return false;
+            }
+        },
+        clear() {
+            localStorage.removeItem(STORAGE_KEY);
+        }
+    };
+
+    let DB = null;
+
+    function initDB() {
+        DB = StorageAPI.load() || buildDefaultDB();
+
+        if (!DB.presets) {
+            DB.presets = {};
+        }
+        if (!Array.isArray(DB.reasons)) {
+            DB.reasons = ['파트 이동'];
+        }
+        // 예전에 저장한 템플릿의 고정 문구 "사유 : 파트 이동"을 {사유} 항목으로 바꿈
+        if (DB.settings.template && DB.settings.template.includes('사유 : 파트 이동')) {
+            DB.settings.template = DB.settings.template.replace('사유 : 파트 이동', '사유 : {사유}');
+        }
+        if (!DB.settings.dispatcherPhone) {
+            DB.settings.dispatcherPhone = "";
+        }
+        if (!DB.settings.senderPhone) {
+            DB.settings.senderPhone = "";
+        }
+        if (!DB.settings.themeMode) {
+            DB.settings.themeMode = "system";
+        }
+
+        StorageAPI.save(DB);
+        applyTheme();
+        renderAllUI();
+    }
+
+    // ----- 화면 모드 (라이트 / 다크 / 시스템) -----
+    function systemPrefersDark() {
+        // 안드로이드 앱이면 폰의 실제 다크 모드 설정을 직접 확인
+        if (window.AndroidApp && window.AndroidApp.isSystemDark) return window.AndroidApp.isSystemDark();
+        return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+
+    function applyTheme() {
+        const mode = (DB && DB.settings && DB.settings.themeMode) || 'system';
+        const dark = mode === 'dark' || (mode === 'system' && systemPrefersDark());
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        Native.call('setStatusBarDark', dark);
+        // 웹앱: 브라우저/상태바 색을 화면 배경과 맞춤
+        const themeMeta = document.querySelector('meta[name="theme-color"]');
+        if (themeMeta) themeMeta.setAttribute('content', dark ? '#000000' : '#f5f5f7');
+        document.querySelectorAll('#themeSeg button').forEach(b => {
+            b.classList.toggle('active', b.dataset.mode === mode);
+        });
+    }
+
+    function setThemeMode(mode) {
+        DB.settings.themeMode = mode;
+        StorageAPI.save(DB);
+        applyTheme();
+    }
+
+    document.addEventListener('visibilitychange', () => { if (DB) applyTheme(); });
+    if (window.matchMedia) {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        if (mq.addEventListener) mq.addEventListener('change', () => { if (DB) applyTheme(); });
+    }
+
+    // ----- 문자 템플릿 (설정 탭에서 수정) -----
+    const TEMPLATE_KEYS = ['내이름','요청번호','요청자','날짜','배차시간','차량종류','출발지','보내는사람','도착지','받는사람','사유','프로젝트번호'];
+
+    const DEFAULT_TEMPLATE = `주성엔지니어링 {내이름}입니다.
+배차 요청드립니다.
+
+요청번호 : {요청번호}
+요청자 : {요청자}
+날짜 : {날짜}
+배차시간 : {배차시간}
+차량종류 : {차량종류}
+
+출발지 : {출발지}
+보내는 사람 : {보내는사람}
+
+도착지 : {도착지}
+받는 사람 : {받는사람}
+
+사유 : {사유}
+Project No : {프로젝트번호}
+
+감사합니다.`;
+
+    function getTemplate() {
+        const t = DB && DB.settings && DB.settings.template;
+        return (t && t.trim()) ? t : DEFAULT_TEMPLATE;
+    }
+
+    // {항목} 자리를 실제 값으로 한 번에 치환 (값 안의 {…}는 다시 치환하지 않음)
+    function renderTemplate(tpl, values) {
+        return tpl.replace(/\{([^{}\s]+)\}/g, (m, k) => (k in values ? values[k] : m));
+    }
+
+    function insertPlaceholder(key) {
+        const ta = document.getElementById('templateInput');
+        const tag = '{' + key + '}';
+        const start = ta.selectionStart != null ? ta.selectionStart : ta.value.length;
+        const end = ta.selectionEnd != null ? ta.selectionEnd : start;
+        ta.value = ta.value.slice(0, start) + tag + ta.value.slice(end);
+        const pos = start + tag.length;
+        ta.focus();
+        ta.setSelectionRange(pos, pos);
+    }
+
+    function saveTemplate() {
+        const text = document.getElementById('templateInput').value;
+        if (!text.trim()) return alert('템플릿이 비어 있어요. 내용을 입력해주세요.');
+        const used = text.match(/\{([^{}\s]+)\}/g) || [];
+        const unknown = [...new Set(used.filter(t => !TEMPLATE_KEYS.includes(t.slice(1, -1))))];
+        if (unknown.length) return alert('알 수 없는 항목이 있어요: ' + unknown.join(', ') + '\n위의 항목 버튼으로 넣어주세요.');
+        DB.settings.template = text;
+        StorageAPI.save(DB);
+        updatePreview();
+        alert('템플릿이 저장되었습니다.');
+    }
+
+    function resetTemplate() {
+        showConfirm('기본 템플릿으로 되돌릴까요?', '지금 수정한 템플릿 내용이 사라져요.', () => {
+            DB.settings.template = '';
+            StorageAPI.save(DB);
+            document.getElementById('templateInput').value = DEFAULT_TEMPLATE;
+            updatePreview();
+        });
+    }
+
+    // ----- 경로 프리셋 (출발지 + 보내는 사람 + 도착지 + 받는 사람) -----
+    // 지워진 장소/인원을 가리키는 프리셋은 정리
+    function pruneRefs() {
+        let changed = false;
+        Object.entries(DB.presets).forEach(([id, p]) => {
+            if (!DB.locations[p.departLocId] || !DB.locations[p.destLocId]) { delete DB.presets[id]; changed = true; return; }
+            if (p.senderId && (!DB.people[p.senderId] || DB.people[p.senderId].locId !== p.departLocId)) { p.senderId = ''; changed = true; }
+            if (p.receiverId && (!DB.people[p.receiverId] || DB.people[p.receiverId].locId !== p.destLocId)) { p.receiverId = ''; changed = true; }
+        });
+        if (changed) StorageAPI.save(DB);
+    }
+
+    function renderPresetBar() {
+        pruneRefs();
+        const bar = document.getElementById('presetBar');
+        bar.innerHTML = '';
+        const add = document.createElement('button');
+        add.className = 'preset-chip add';
+        add.innerHTML = '<svg class="ic"><use href="#i-plus"/></svg>현재 경로 저장';
+        add.onclick = savePresetFromForm;
+        bar.appendChild(add);
+        Object.entries(DB.presets).forEach(([id, p]) => {
+            const b = document.createElement('button');
+            b.className = 'preset-chip';
+            b.textContent = p.name;
+            b.onclick = () => applyPreset(id);
+            bar.appendChild(b);
+        });
+    }
+
+    function setSelectValue(id, v) {
+        const sel = document.getElementById(id);
+        sel.value = v;
+        fireChange(sel);
+    }
+
+    function applyPreset(id) {
+        const p = DB.presets[id];
+        if (!p) return;
+        setSelectValue('departSelect', p.departLocId);      // 출발지를 먼저 바꿔야 인원 목록이 갱신됨
+        setSelectValue('sendPersonSelect', p.senderId || '');
+        setSelectValue('destSelect', p.destLocId);
+        setSelectValue('recvPersonSelect', p.receiverId || '');
+    }
+
+    function savePresetFromForm() {
+        const d = document.getElementById('departSelect').value;
+        const t = document.getElementById('destSelect').value;
+        if (!DB.locations[d] || !DB.locations[t]) {
+            return alert('출발지와 도착지를 등록된 장소로 선택한 뒤 저장해주세요.');
+        }
+        const sid = document.getElementById('sendPersonSelect').value;
+        const rid = document.getElementById('recvPersonSelect').value;
+        const senderId = DB.people[sid] ? sid : '';
+        const receiverId = DB.people[rid] ? rid : '';
+        const dup = Object.values(DB.presets).some(p => p.departLocId === d && p.destLocId === t && p.senderId === senderId && p.receiverId === receiverId);
+        if (dup) return alert('이미 저장된 경로예요.');
+
+        DB.presets[generateId('pre')] = { name: DB.locations[d].name + ' → ' + DB.locations[t].name, departLocId: d, senderId: senderId, destLocId: t, receiverId: receiverId };
+        StorageAPI.save(DB);
+        renderPresetBar();
+        renderPresetList();
+        alert('경로를 저장했어요. 이름은 데이터 관리에서 바꿀 수 있어요.');
+    }
+
+    function presetRowHTML(id) {
+        const p = DB.presets[id];
+        const s = DB.people[p.senderId], r = DB.people[p.receiverId];
+        return `
+            <div class="data-info">
+                <span class="data-title">${escapeHtml(p.name)}</span>
+                <span class="data-sub">${escapeHtml(DB.locations[p.departLocId].name)} → ${escapeHtml(DB.locations[p.destLocId].name)}</span>
+                <span class="data-sub">${escapeHtml(s ? s.name : '인원 없음')} → ${escapeHtml(r ? r.name : '인원 없음')}</span>
+            </div>
+            <div class="data-actions">
+                <button class="btn-edit" onclick="startEditPreset('${id}')">수정</button>
+                <button class="btn-danger" onclick="deletePreset('${id}')">삭제</button>
+            </div>
+        `;
+    }
+
+    function renderPresetRow(id) {
+        const li = document.getElementById('presetItem_' + id);
+        if (li && DB.presets[id]) li.innerHTML = presetRowHTML(id);
+    }
+
+    function renderPresetList() {
+        pruneRefs();
+        const list = document.getElementById('presetList');
+        list.innerHTML = '';
+        const ids = Object.keys(DB.presets);
+        if (!ids.length) { list.innerHTML = '<li class="empty-li">저장된 경로가 없어요.</li>'; return; }
+        ids.forEach(id => {
+            const li = document.createElement('li');
+            li.className = 'data-item';
+            li.id = 'presetItem_' + id;
+            li.innerHTML = presetRowHTML(id);
+            list.appendChild(li);
+        });
+    }
+
+    function startEditPreset(id) {
+        const li = document.getElementById('presetItem_' + id);
+        li.innerHTML = `
+            <div class="edit-row">
+                <input type="text" id="editPresetName_${id}" value="${escapeHtml(DB.presets[id].name)}">
+            </div>
+            <div class="data-actions">
+                <button class="btn-add" style="width:auto;" onclick="saveEditPreset('${id}')">저장</button>
+                <button class="btn-secondary" style="width:auto;" onclick="renderPresetRow('${id}')">취소</button>
+            </div>
+        `;
+    }
+
+    function saveEditPreset(id) {
+        const name = document.getElementById('editPresetName_' + id).value.trim();
+        if (!name) return alert('경로 이름을 입력해주세요.');
+        DB.presets[id].name = name;
+        StorageAPI.save(DB);
+        renderPresetRow(id);
+        renderPresetBar();
+    }
+
+    function deletePreset(id) {
+        const p = DB.presets[id];
+        showConfirm('경로를 삭제할까요?', `[${p.name}] 경로 프리셋만 삭제돼요. 장소와 인원은 그대로예요.`, () => {
+            delete DB.presets[id];
+            StorageAPI.save(DB);
+            const li = document.getElementById('presetItem_' + id);
+            if (li) li.remove();
+            if (!document.querySelector('#presetList .data-item')) {
+                document.getElementById('presetList').innerHTML = '<li class="empty-li">저장된 경로가 없어요.</li>';
+            }
+            renderPresetBar();
+        });
+    }
+
+    // ----- 백업 / 복원 (파일 하나로 저장 · 불러오기) -----
+    function backupFileName() { return 'dispatch_backup_' + toISODate(new Date()) + '.json'; }
+
+    function exportBackup() {
+        const json = JSON.stringify({ app: 'dispatch-message', version: 1, exportedAt: new Date().toISOString(), data: DB }, null, 2);
+        const name = backupFileName();
+        if (Native.available('exportBackup')) { Native.call('exportBackup', json, name); return; }
+        // 휴대폰 웹앱: 공유 창 → '파일에 저장' (아이폰 웹앱은 다운로드가 불안정해서 공유 방식 사용)
+        if (isMobileWeb() && navigator.canShare) {
+            const file = new File([json], name, { type: 'application/json' });
+            if (navigator.canShare({ files: [file] })) {
+                navigator.share({ files: [file], title: name }).catch((e) => {
+                    if (e && e.name !== 'AbortError') alert('백업 파일을 저장하지 못했어요.');
+                });
+                return;
+            }
+        }
+        // 컴퓨터 브라우저: 파일 다운로드
+        const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+        const a = document.createElement('a');
+        a.href = url; a.download = name;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function importBackup() {
+        if (Native.available('importBackup')) { Native.call('importBackup'); return; }
+        document.getElementById('backupFile').click();     // 웹 브라우저: 파일 선택창
+    }
+
+    document.getElementById('backupFile').addEventListener('change', (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => onBackupImported(String(reader.result));
+        reader.readAsText(f);
+        e.target.value = '';
+    });
+
+    // 앱(안드로이드/iOS)이 저장을 마친 뒤 호출
+    function onBackupSaved(ok) {
+        alert(ok ? '백업 파일을 저장했어요.' : '백업 파일을 저장하지 못했어요.');
+    }
+
+    // 파일 내용을 검사해서 안전한 값만 남김 (앱의 백업 파일이 아니거나 깨진 항목은 제외)
+    function sanitizeBackup(obj) {
+        const d = obj && obj.data;
+        if (!obj || obj.app !== 'dispatch-message' || !d || typeof d.locations !== 'object' || typeof d.people !== 'object') return null;
+        const okId = (id) => /^[A-Za-z0-9_]{1,40}$/.test(id);
+        const str = (v) => (typeof v === 'string' ? v : '');
+        const out = { locations: {}, people: {}, presets: {}, settings: {} };
+        Object.entries(d.locations).forEach(([id, l]) => {
+            if (okId(id) && l && str(l.name) && str(l.addr)) out.locations[id] = { name: l.name, addr: l.addr };
+        });
+        Object.entries(d.people).forEach(([id, p]) => {
+            if (okId(id) && p && out.locations[p.locId] && str(p.name) && str(p.phone)) out.people[id] = { locId: p.locId, name: p.name, phone: p.phone };
+        });
+        Object.entries(d.presets || {}).forEach(([id, r]) => {
+            if (okId(id) && r && str(r.name)) out.presets[id] = { name: r.name, departLocId: str(r.departLocId), senderId: str(r.senderId), destLocId: str(r.destLocId), receiverId: str(r.receiverId) };
+        });
+        // 사유: 예전 백업(사유 없음)이면 기본값, 있으면 빈칸·중복 제거
+        out.reasons = Array.isArray(d.reasons)
+            ? [...new Set(d.reasons.filter(r => typeof r === 'string' && r.trim() && r !== 'custom').map(r => r.trim()))]
+            : ['파트 이동'];
+        const s = d.settings || {};
+        out.settings = {
+            senderName: str(s.senderName), senderPhone: str(s.senderPhone), dispatcherPhone: str(s.dispatcherPhone),
+            themeMode: ['light', 'dark', 'system'].includes(s.themeMode) ? s.themeMode : 'system',
+            template: str(s.template).replace('사유 : 파트 이동', '사유 : {사유}')
+        };
+        return out;
+    }
+
+    function onBackupImported(text) {
+        let obj;
+        try { obj = JSON.parse(text); } catch (e) { return alert('백업 파일을 읽을 수 없어요. 올바른 파일인지 확인해주세요.'); }
+        const data = sanitizeBackup(obj);
+        if (!data) return alert('이 앱의 백업 파일이 아니에요.');
+        const when = typeof obj.exportedAt === 'string' ? obj.exportedAt.slice(0, 10) + ' 백업 · ' : '';
+        const info = `${when}장소 ${Object.keys(data.locations).length}곳, 인원 ${Object.keys(data.people).length}명, 경로 ${Object.keys(data.presets).length}개, 사유 ${data.reasons.length}개`;
+        showConfirm('백업을 불러올까요?', info + '\n지금 데이터는 이 파일 내용으로 바뀌어요.', () => {
+            DB = data;
+            StorageAPI.save(DB);
+            applyTheme();
+            renderAllUI();
+            renderManageUI();
+            switchTab('settings');
+            alert('백업을 불러왔어요.');
+        });
+    }
+
+    // ----- 알림창: 기본 alert()를 앱 디자인의 알림창으로 대체 (여러 개가 연달아 떠도 차례로 표시) -----
+    const _alertQueue = [];
+    let _alertOpen = false;
+
+    function showAlert(msg) {
+        _alertQueue.push(String(msg));
+        if (!_alertOpen) nextAlert();
+    }
+
+    function nextAlert() {
+        const modal = document.getElementById('alertModal');
+        if (!_alertQueue.length) {
+            _alertOpen = false;
+            modal.style.display = 'none';
+            return;
+        }
+        _alertOpen = true;
+        const msg = _alertQueue.shift();
+        let title = '알림', icon = '';
+        if (msg.includes('복사되었습니다')) {
+            title = '복사 성공';
+            icon = '<span class="tile t-green"><svg class="ic"><use href="#i-check"/></svg></span>';
+        } else if (msg.includes('저장했어요') || msg.includes('불러왔어요')) {
+            title = msg.includes('불러왔어요') ? '복원 완료' : (msg.includes('백업') ? '백업 완료' : '저장 완료');
+            icon = '<span class="tile t-green"><svg class="ic"><use href="#i-check"/></svg></span>';
+        } else if (msg.includes('복사에 실패')) {
+            title = '복사 실패';
+            icon = '<span class="tile t-red"><svg class="ic"><use href="#i-alert"/></svg></span>';
+        }
+        document.getElementById('alertIcon').innerHTML = icon;
+        document.getElementById('alertTitle').textContent = title;
+        document.getElementById('alertText').textContent = msg;
+        modal.style.display = 'flex';
+    }
+
+    function closeAlert() { nextAlert(); }
+
+    window.alert = showAlert;
+
+    // ----- 확인창 (예 / 아니오) -----
+    let _confirmYes = null;
+
+    function showConfirm(title, text, onYes) {
+        document.getElementById('modalTitle').textContent = title;
+        document.getElementById('modalText').textContent = text;
+        _confirmYes = onYes;
+        document.getElementById('confirmModal').style.display = 'flex';
+    }
+
+    function closeConfirm() {
+        document.getElementById('confirmModal').style.display = 'none';
+        _confirmYes = null;
+    }
+
+    function confirmYes() {
+        const fn = _confirmYes;
+        closeConfirm();
+        if (fn) fn();
+    }
+
+    // 초기화: 버튼 → 확인창(예/아니오) → 예일 때만 실제 초기화
+    function resetDB() {
+        showConfirm('진짜 초기화하시겠습니까?',
+            '추가·수정한 장소, 인원, 내 정보, 문자 템플릿이 모두 삭제되고 기본값으로 돌아갑니다. 되돌릴 수 없어요.',
+            doReset);
+    }
+
+    function doReset() {
+        StorageAPI.clear();
+        DB = buildDefaultDB();
+        StorageAPI.save(DB);
+        applyTheme();
+        renderAllUI();
+        renderManageUI();
+        switchTab('settings');
+        alert("초기화 되었습니다.");
+    }
+
+    // ==========================================
+    // 2. 탭 전환
+    // ==========================================
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+
+        const tabs = document.querySelectorAll('.tab');
+        if (tabName === 'write') {
+            tabs[0].classList.add('active');
+            document.getElementById('writeSection').classList.add('active');
+            renderAllUI();
+        } else if (tabName === 'manage') {
+            tabs[1].classList.add('active');
+            document.getElementById('manageSection').classList.add('active');
+            renderManageUI();
+        } else {
+            tabs[2].classList.add('active');
+            document.getElementById('settingsSection').classList.add('active');
+            document.getElementById('senderNameInput').value = DB.settings.senderName || '';
+            document.getElementById('senderPhoneInput').value = DB.settings.senderPhone || '';
+            document.getElementById('templateInput').value = getTemplate();
+            document.getElementById('dispatcherPhoneInput').value = DB.settings.dispatcherPhone || '';
+        }
+    }
+
+    // 폰의 뒤로가기 버튼 (안드로이드 MainActivity가 호출)
+    // 처리했으면 true, 더 닫을 게 없으면 false → 앱이 종료됨
+    function handleBack() {
+        if (document.getElementById('alertModal').style.display === 'flex') { closeAlert(); return true; }
+        if (document.getElementById('confirmModal').style.display === 'flex') { closeConfirm(); return true; }
+        if (document.getElementById('sheet').classList.contains('open')) { closeSheet(); return true; }
+        if (!document.getElementById('writeSection').classList.contains('active')) { switchTab('write'); window.scrollTo(0, 0); return true; }
+        return false;
+    }
+
+    // ==========================================
+    // 3. 문자 작성용 UI 렌더링
+    // ==========================================
+    function renderAllUI() {
+        renderLocationDropdown('departSelect');
+        renderLocationDropdown('destSelect');
+        renderLocationDropdown('manageLocSelect', false);
+
+        updatePeopleDropdown('departSelect', 'sendPersonSelect', 'sendPersonCustom');
+        updatePeopleDropdown('destSelect', 'recvPersonSelect', 'recvPersonCustom');
+        renderReasonDropdown();
+        renderPresetBar();
+        updatePreview();
+    }
+
+    function renderLocationDropdown(selectId, includeCustom = true) {
+        const select = document.getElementById(selectId);
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">장소를 선택해주세요</option>';
+
+        for (const [locId, loc] of Object.entries(DB.locations)) {
+            const opt = document.createElement('option');
+            opt.value = locId;
+            opt.textContent = loc.name;
+            select.appendChild(opt);
+        }
+
+        if (includeCustom) {
+            const customOpt = document.createElement('option');
+            customOpt.value = 'custom';
+            customOpt.textContent = '신규 (직접 입력)';
+            select.appendChild(customOpt);
+        }
+
+        if (DB.locations[currentVal] || currentVal === 'custom') {
+            select.value = currentVal;
+        }
+    }
+
+    function peopleForLocation(locId) {
+        return Object.entries(DB.people).filter(([, p]) => p.locId === locId);
+    }
+
+    function updatePeopleDropdown(locationSelectId, peopleSelectId, peopleCustomId) {
+        const locId = document.getElementById(locationSelectId).value;
+        const peopleSelect = document.getElementById(peopleSelectId);
+        const currentVal = peopleSelect.value;
+
+        peopleSelect.innerHTML = '<option value="">인원을 선택해주세요</option>';
+
+        peopleForLocation(locId).forEach(([personId, person]) => {
+            const opt = document.createElement('option');
+            opt.value = personId;
+            opt.textContent = person.name;
+            peopleSelect.appendChild(opt);
+        });
+
+        const customOpt = document.createElement('option');
+        customOpt.value = 'custom';
+        customOpt.textContent = '신규 (직접 입력)';
+        peopleSelect.appendChild(customOpt);
+
+        // 이전 선택이 새 목록에 있을 때만 유지 (없으면 '인원을 선택해주세요'로)
+        const stillThere = Array.from(peopleSelect.options).some(o => o.value === currentVal);
+        peopleSelect.value = stillThere ? currentVal : '';
+        // '신규 (직접 입력)'이 유지된 경우 입력칸도 계속 보이게
+        toggleCustom(peopleSelectId, peopleCustomId);
+    }
+
+    // ==========================================
+    // 4. 데이터 관리 (CRUD) - 장소/인원
+    // ==========================================
+    function renderManageUI() {
+        renderLocationList();
+        renderLocationDropdown('manageLocSelect', false);
+        renderManagePeopleList();
+        renderPresetList();
+        renderReasonList();
+    }
+
+    // ----- 사유 (문자 작성의 '사유' 드롭다운 + 데이터 관리의 사유 목록) -----
+    function renderReasonDropdown() {
+        const select = document.getElementById('reasonSelect');
+        const currentVal = select.value;
+        select.innerHTML = '';
+        DB.reasons.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r;
+            opt.textContent = r;
+            select.appendChild(opt);
+        });
+        const customOpt = document.createElement('option');
+        customOpt.value = 'custom';
+        customOpt.textContent = '신규 (직접 입력)';
+        select.appendChild(customOpt);
+        // 이전 선택이 남아 있으면 유지, 없으면 맨 위 사유 (사유가 하나도 없으면 직접 입력)
+        const keep = Array.from(select.options).some(o => o.value === currentVal);
+        select.value = keep ? currentVal : (DB.reasons[0] || 'custom');
+        toggleCustom('reasonSelect', 'reasonCustom');
+    }
+
+    function renderReasonList() {
+        const list = document.getElementById('reasonList');
+        if (!DB.reasons.length) { list.innerHTML = '<li class="empty-li">저장된 사유가 없어요.</li>'; return; }
+        list.innerHTML = DB.reasons.map((r, i) => `
+            <li class="data-item">
+                <div class="data-info"><span class="data-title">${escapeHtml(r)}</span></div>
+                <div class="data-actions"><button class="btn-danger" onclick="deleteReason(${i})">삭제</button></div>
+            </li>`).join('');
+    }
+
+    function addReason() {
+        const text = document.getElementById('newReason').value.trim();
+        if (!text) return alert('사유를 입력해주세요.');
+        if (text === 'custom' || DB.reasons.includes(text)) return alert('이미 있는 사유예요.');
+        DB.reasons.push(text);
+        StorageAPI.save(DB);
+        document.getElementById('newReason').value = '';
+        renderReasonList();
+        renderReasonDropdown();
+        alert('사유가 추가되었습니다.');
+    }
+
+    function deleteReason(i) {
+        const r = DB.reasons[i];
+        if (r === undefined) return;
+        showConfirm('사유를 삭제할까요?', `[${r}] 사유를 목록에서 삭제해요.`, () => {
+            DB.reasons.splice(i, 1);
+            StorageAPI.save(DB);
+            renderReasonList();
+            renderReasonDropdown();
+            updatePreview();
+        });
+    }
+
+    // 장소 한 줄(보기 모드) HTML
+    function locRowHTML(locId) {
+        const loc = DB.locations[locId];
+        return `
+            <div class="data-info">
+                <span class="data-title">${escapeHtml(loc.name)}</span>
+                <span class="data-sub">${escapeHtml(loc.addr)}</span>
+            </div>
+            <div class="data-actions">
+                <button class="btn-edit" onclick="startEditLocation('${locId}')">수정</button>
+                <button class="btn-danger" onclick="deleteLocation('${locId}')">삭제</button>
+            </div>
+        `;
+    }
+
+    // 해당 장소 한 줄만 다시 그림 (다른 줄의 수정 중인 상태는 건드리지 않음)
+    function renderLocRow(locId) {
+        const li = document.getElementById('locItem_' + locId);
+        if (li && DB.locations[locId]) li.innerHTML = locRowHTML(locId);
+    }
+
+    function appendLocRow(locId) {
+        const li = document.createElement('li');
+        li.className = 'data-item';
+        li.id = 'locItem_' + locId;
+        li.innerHTML = locRowHTML(locId);
+        document.getElementById('locationList').appendChild(li);
+    }
+
+    function renderLocationList() {
+        document.getElementById('locationList').innerHTML = '';
+        Object.keys(DB.locations).forEach(appendLocRow);
+    }
+
+    function startEditLocation(locId) {
+        const loc = DB.locations[locId];
+        const li = document.getElementById('locItem_' + locId);
+        li.innerHTML = `
+            <div class="edit-row">
+                <input type="text" id="editLocName_${locId}" value="${escapeHtml(loc.name)}">
+                <input type="text" id="editLocAddr_${locId}" value="${escapeHtml(loc.addr)}">
+            </div>
+            <div class="data-actions">
+                <button class="btn-add" style="width:auto;" onclick="saveEditLocation('${locId}')">저장</button>
+                <button class="btn-secondary" style="width:auto;" onclick="renderLocRow('${locId}')">취소</button>
+            </div>
+        `;
+    }
+
+    function saveEditLocation(locId) {
+        const name = document.getElementById('editLocName_' + locId).value.trim();
+        const addr = document.getElementById('editLocAddr_' + locId).value.trim();
+        if (!name || !addr) return alert("명칭과 상세 주소를 모두 입력해주세요.");
+
+        DB.locations[locId] = { name, addr };
+        StorageAPI.save(DB);
+        renderLocRow(locId);      // 이 장소 한 줄만 갱신
+        renderAllUI();
+    }
+
+    function deleteLocation(locId) {
+        const loc = DB.locations[locId];
+        showConfirm('장소를 삭제할까요?', `[${loc.name}] 장소와 소속 인원 데이터가 모두 삭제돼요.`, () => {
+            delete DB.locations[locId];
+            peopleForLocation(locId).forEach(([personId]) => delete DB.people[personId]);
+            StorageAPI.save(DB);
+            const li = document.getElementById('locItem_' + locId);
+            if (li) li.remove();   // 이 줄만 제거 (다른 줄의 수정 상태 유지)
+            renderAllUI();
+            renderManagePeopleList();
+            renderPresetList();
+        });
+    }
+
+    function addLocation() {
+        const name = document.getElementById('newLocName').value.trim();
+        const addr = document.getElementById('newLocAddr').value.trim();
+
+        if (!name || !addr) return alert("명칭과 상세 주소를 모두 입력해주세요.");
+
+        const exists = Object.values(DB.locations).some(l => l.name === name);
+        if (exists) return alert("이미 존재하는 장소 명칭입니다.");
+
+        const locId = generateId('loc');
+        DB.locations[locId] = { name, addr };
+        StorageAPI.save(DB);
+
+        document.getElementById('newLocName').value = '';
+        document.getElementById('newLocAddr').value = '';
+        appendLocRow(locId);
+        renderAllUI();
+        alert("장소가 추가되었습니다.");
+    }
+
+    document.getElementById('manageLocSelect').addEventListener('change', renderManagePeopleList);
+
+    // 인원 한 줄(보기 모드) HTML
+    function personRowHTML(personId) {
+        const person = DB.people[personId];
+        return `
+            <div class="data-info">
+                <span class="data-title">${escapeHtml(person.name)}</span>
+                <span class="data-sub">${escapeHtml(person.phone)}</span>
+            </div>
+            <div class="data-actions">
+                <button class="btn-edit" onclick="startEditPerson('${personId}')">수정</button>
+                <button class="btn-danger" onclick="deletePerson('${personId}')">삭제</button>
+            </div>
+        `;
+    }
+
+    function renderPersonRow(personId) {
+        const li = document.getElementById('personItem_' + personId);
+        if (li && DB.people[personId]) li.innerHTML = personRowHTML(personId);
+    }
+
+    function appendPersonRow(personId) {
+        const li = document.createElement('li');
+        li.className = 'data-item';
+        li.id = 'personItem_' + personId;
+        li.innerHTML = personRowHTML(personId);
+        document.getElementById('peopleList').appendChild(li);
+    }
+
+    function renderManagePeopleList() {
+        const list = document.getElementById('peopleList');
+        const locId = document.getElementById('manageLocSelect').value;
+        list.innerHTML = '';
+
+        if (!locId) {
+            list.innerHTML = '<li class="empty-li">위에서 장소를 선택해주세요.</li>';
+            return;
+        }
+
+        const people = peopleForLocation(locId);
+        if (people.length === 0) {
+            list.innerHTML = '<li class="empty-li">등록된 인원이 없습니다.</li>';
+            return;
+        }
+
+        people.forEach(([personId]) => appendPersonRow(personId));
+    }
+
+    function startEditPerson(personId) {
+        const person = DB.people[personId];
+        const li = document.getElementById('personItem_' + personId);
+        li.innerHTML = `
+            <div class="edit-row">
+                <input type="text" id="editPersonName_${personId}" value="${escapeHtml(person.name)}">
+                <!-- 수정 시에도 전화번호 자동 포맷 적용 -->
+                <input type="text" id="editPersonPhone_${personId}" value="${escapeHtml(person.phone)}" oninput="this.value = formatPhoneNumber(this.value);">
+            </div>
+            <div class="data-actions">
+                <button class="btn-add" style="width:auto;" onclick="saveEditPerson('${personId}')">저장</button>
+                <button class="btn-secondary" style="width:auto;" onclick="renderPersonRow('${personId}')">취소</button>
+            </div>
+        `;
+    }
+
+    function saveEditPerson(personId) {
+        const name = document.getElementById('editPersonName_' + personId).value.trim();
+        const phone = document.getElementById('editPersonPhone_' + personId).value.trim();
+        if (!name || !phone) return alert("이름과 연락처를 모두 입력해주세요.");
+
+        DB.people[personId].name = name;
+        DB.people[personId].phone = phone; // 이미 포맷된 번호가 저장됨
+        StorageAPI.save(DB);
+        renderPersonRow(personId);   // 이 인원 한 줄만 갱신
+        renderAllUI();
+    }
+
+    // 폰 연락처 앱 열기 (안드로이드 앱에서만 동작)
+    function pickContact() {
+        if (Native.available('pickContact')) {
+            Native.call('pickContact');
+        } else {
+            alert('앱에서만 사용할 수 있는 기능입니다.');
+        }
+    }
+
+    // 연락처 선택 후 안드로이드(MainActivity)가 호출 → 입력칸만 채움 (직급 추가 후 '+ 인원 추가'로 저장)
+    function onContactPicked(name, phone) {
+        let digits = (phone || '').replace(/[^0-9]/g, '');
+        if (digits.startsWith('82')) digits = '0' + digits.substring(2);   // +82 10... → 010...
+        document.getElementById('newPersonName').value = name || '';
+        document.getElementById('newPersonPhone').value = formatPhoneNumber(digits);
+    }
+
+    function addPerson() {
+        const locId = document.getElementById('manageLocSelect').value;
+        const name = document.getElementById('newPersonName').value.trim();
+        const phone = document.getElementById('newPersonPhone').value.trim();
+
+        if (!locId) return alert("소속 장소를 먼저 선택해주세요.");
+        if (!name || !phone) return alert("이름과 연락처를 모두 입력해주세요.");
+
+        const personId = generateId('per');
+        DB.people[personId] = { locId, name, phone }; // 이미 포맷된 번호가 저장됨
+        StorageAPI.save(DB);
+
+        document.getElementById('newPersonName').value = '';
+        document.getElementById('newPersonPhone').value = '';
+        const emptyMsg = document.querySelector('#peopleList .empty-li');
+        if (emptyMsg) emptyMsg.remove();
+        appendPersonRow(personId);
+        renderAllUI();
+        alert("인원이 추가되었습니다.");
+    }
+
+    function deletePerson(personId) {
+        const p = DB.people[personId];
+        showConfirm('인원을 삭제할까요?', `${p ? p.name : '이 인원'}을(를) 삭제해요.`, () => {
+            delete DB.people[personId];
+            StorageAPI.save(DB);
+            const li = document.getElementById('personItem_' + personId);
+            if (li) li.remove();   // 이 줄만 제거 (다른 줄의 수정 상태 유지)
+            if (!document.querySelector('#peopleList .data-item')) {
+                document.getElementById('peopleList').innerHTML = '<li class="empty-li">등록된 인원이 없습니다.</li>';
+            }
+            renderAllUI();
+            renderPresetList();
+        });
+    }
+
+    // ==========================================
+    // 5. 설정 (발신자 이름 & 배차 담당자 번호)
+    // ==========================================
+    function saveMyInfo() {
+        const name = document.getElementById('senderNameInput').value.trim();
+        const phone = document.getElementById('senderPhoneInput').value.trim();
+        if (!name || !phone) return alert("이름/직급과 연락처를 모두 입력해주세요.");
+        DB.settings.senderName = name;
+        DB.settings.senderPhone = phone;
+        StorageAPI.save(DB);
+        updatePreview();
+        alert("내 정보가 저장되었습니다.");
+    }
+
+    function saveDispatcherPhone() {
+        const phone = document.getElementById('dispatcherPhoneInput').value.trim();
+        if (!phone) return alert("배차 담당자 전화번호를 입력해주세요.");
+        DB.settings.dispatcherPhone = phone; // 포맷된 상태로 DB 저장
+        StorageAPI.save(DB);
+        alert("배차 담당자 전화번호가 저장되었습니다.");
+    }
+
+    // ==========================================
+    // 6. 폼 이벤트 및 미리보기
+    // ==========================================
+    document.querySelectorAll('#writeSection input, #writeSection select').forEach(el => {
+        el.addEventListener('input', updatePreview);
+    });
+
+    document.getElementById('departSelect').addEventListener('change', () => {
+        updatePeopleDropdown('departSelect', 'sendPersonSelect', 'sendPersonCustom');
+        toggleCustom('departSelect', 'departCustom');
+        updatePreview();
+    });
+
+    document.getElementById('destSelect').addEventListener('change', () => {
+        updatePeopleDropdown('destSelect', 'recvPersonSelect', 'recvPersonCustom');
+        toggleCustom('destSelect', 'destCustom');
+        updatePreview();
+    });
+
+    document.getElementById('sendPersonSelect').addEventListener('change', () => toggleCustom('sendPersonSelect', 'sendPersonCustom'));
+    document.getElementById('recvPersonSelect').addEventListener('change', () => toggleCustom('recvPersonSelect', 'recvPersonCustom'));
+    document.getElementById('reasonSelect').addEventListener('change', () => { toggleCustom('reasonSelect', 'reasonCustom'); updatePreview(); });
+
+    function toggleCustom(selectId, customId) {
+        const select = document.getElementById(selectId);
+        const custom = document.getElementById(customId);
+        custom.style.display = select.value === 'custom' ? 'flex' : 'none';
+    }
+
+    document.getElementById('dateInput').value = toISODate(new Date());   // 폰의 현재 날짜(한국 시간 기준)로 설정
+
+    // 앱을 켜둔 채 자정이 지나면: 날짜가 어제(기본값) 그대로면 오늘로 바꾸고, 어제 입력한 요청번호 순번은 비움
+    // (날짜를 직접 다른 날로 골라 둔 경우는 그대로 둠)
+    let _formDay = toISODate(new Date());
+    function refreshDayIfChanged() {
+        const today = toISODate(new Date());
+        if (today === _formDay) return;
+        const dateInput = document.getElementById('dateInput');
+        if (dateInput.value === _formDay) {
+            dateInput.value = today;
+            fireChange(dateInput);
+        }
+        document.getElementById('reqNoSeq').value = '';
+        _formDay = today;
+        if (DB) updatePreview();
+    }
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshDayIfChanged(); });
+    setInterval(refreshDayIfChanged, 60 * 1000);
+
+    function formatDate(dateStr) {
+        if (!dateStr) return 'X/X(X)';
+        const date = new Date(dateStr);
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        return `${date.getMonth() + 1}/${date.getDate()}(${days[date.getDay()]})`;
+    }
+
+    // HTML 본문과 속성값(value="...") 양쪽에 안전하도록 따옴표까지 바꿈
+    function escapeHtml(str) {
+        return String(str ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function parseLocation(selectId, customNameId, customAddrId) {
+        const val = document.getElementById(selectId).value;
+        if (val === 'custom') {
+            return `${document.getElementById(customNameId).value || 'XXXX'}\n(${document.getElementById(customAddrId).value || '상세주소'})`;
+        } else if (val && DB.locations[val]) {
+            const loc = DB.locations[val];
+            return `${loc.name}\n(${loc.addr})`;
+        }
+        return 'XXXX\n(상세주소를 선택/입력해주세요)';
+    }
+
+    function parsePerson(locationSelectId, personSelectId, customNameId, customPhoneId) {
+        const personId = document.getElementById(personSelectId).value;
+
+        if (personId === 'custom') {
+            // customPhoneId에는 oninput을 통해 이미 format된 번호가 들어있음
+            return `${document.getElementById(customNameId).value || 'XXX'}\n(${document.getElementById(customPhoneId).value || 'XXX-XXX-XXXX'})`;
+        } else if (personId && DB.people[personId]) {
+            const person = DB.people[personId];
+            return `${person.name}\n(${person.phone})`; // DB에 저장된 번호 그대로 출력
+        }
+        return 'XXX\n(연락처)';
+    }
+
+    // 요청번호 앞 8자리: 오늘 날짜(YYYYMMDD)
+    function todayPrefix() {
+        const d = new Date();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${d.getFullYear()}${mm}${dd}`;
+    }
+
+    // 요청번호 전체 = 오늘 날짜 8자리 + 순번 4자리 (5 → 0005)
+    function buildReqNo() {
+        const seq = document.getElementById('reqNoSeq').value.replace(/[^0-9]/g, '');
+        return todayPrefix() + (seq ? seq.padStart(4, '0') : 'XXXX');
+    }
+
+    function updatePreview() {
+        const dateStr = formatDate(document.getElementById('dateInput').value);
+        const carType = document.getElementById('carType').value;
+        const time = document.getElementById('timeInput').value || 'XX:XX';
+        const projectNo = document.getElementById('projectNo').value || 'XXXXXXXXXX';
+        const reason = currentReason() || 'XXXX';
+
+        // 요청자 = 설정 탭의 내 정보
+        const myName = (DB.settings && DB.settings.senderName) || 'XXX';
+        const myPhone = (DB.settings && DB.settings.senderPhone) || 'XXX-XXX-XXXX';
+        const requester = `${myName}\n(${myPhone})`;
+
+        document.getElementById('reqNoPrefix').textContent = todayPrefix();
+        document.getElementById('requesterInfo').textContent =
+            (DB.settings && DB.settings.senderPhone)
+                ? `요청자: ${myName} (${myPhone}) · 설정 탭에서 변경`
+                : '요청자 연락처가 비어 있어요. 설정 탭에서 내 정보를 입력해주세요.';
+
+        const reqNo = buildReqNo();
+        const depart = parseLocation('departSelect', 'departName', 'departAddr');
+        const sender = parsePerson('departSelect', 'sendPersonSelect', 'sendPersonName', 'sendPersonPhone');
+        const dest = parseLocation('destSelect', 'destName', 'destAddr');
+        const receiver = parsePerson('destSelect', 'recvPersonSelect', 'recvPersonName', 'recvPersonPhone');
+
+        const text = renderTemplate(getTemplate(), {
+            '내이름': myName,
+            '요청번호': reqNo,
+            '요청자': requester,
+            '날짜': dateStr,
+            '배차시간': time,
+            '차량종류': carType,
+            '출발지': depart,
+            '보내는사람': sender,
+            '도착지': dest,
+            '받는사람': receiver,
+            '사유': reason,
+            '프로젝트번호': projectNo
+        });
+
+        document.getElementById('preview').value = text;
+    }
+
+    // '신규 (직접 입력)'으로 넣은 인원을 선택된 장소 소속으로 데이터 관리에 자동 저장
+    // - 장소가 등록된 장소일 때만 저장 (장소도 직접 입력이면 건너뜀)
+    // - 같은 장소에 같은 이름+연락처가 이미 있으면 중복 저장하지 않음
+    // 반환값: 새로 저장된 이름 배열
+    function autoSaveNewPeople() {
+        const targets = [
+            { loc: 'departSelect', person: 'sendPersonSelect', name: 'sendPersonName', phone: 'sendPersonPhone', custom: 'sendPersonCustom' },
+            { loc: 'destSelect',   person: 'recvPersonSelect', name: 'recvPersonName', phone: 'recvPersonPhone', custom: 'recvPersonCustom' }
+        ];
+        const savedNames = [];
+        const resolved = [];
+
+        targets.forEach(t => {
+            const locId = document.getElementById(t.loc).value;
+            if (document.getElementById(t.person).value !== 'custom' || !DB.locations[locId]) return;
+
+            const name = document.getElementById(t.name).value.trim();
+            const phone = document.getElementById(t.phone).value.trim();
+            if (!name || !phone) return;
+
+            const dup = peopleForLocation(locId).find(([, p]) => p.name === name && p.phone === phone);
+            let personId;
+            if (dup) {
+                personId = dup[0];
+            } else {
+                personId = generateId('per');
+                DB.people[personId] = { locId, name, phone };
+                savedNames.push(name);
+            }
+            resolved.push({ t, personId });
+        });
+
+        if (resolved.length === 0) return savedNames;
+
+        StorageAPI.save(DB);
+
+        // 드롭다운에 반영하고, 방금 저장한 인원을 선택 상태로 전환
+        resolved.forEach(({ t, personId }) => {
+            updatePeopleDropdown(t.loc, t.person, t.custom);
+            document.getElementById(t.person).value = personId;
+            toggleCustom(t.person, t.custom);
+            document.getElementById(t.name).value = '';
+            document.getElementById(t.phone).value = '';
+        });
+        updatePreview();
+        return savedNames;
+    }
+
+    // 현재 선택/입력된 사유 (없으면 '')
+    function currentReason() {
+        const v = document.getElementById('reasonSelect').value;
+        return v === 'custom' ? document.getElementById('reasonInput').value.trim() : (v || '');
+    }
+
+    // 직접 입력한 사유를 자주 쓰는 사유에 자동 저장. 반환값: 새로 저장된 사유 또는 ''
+    function autoSaveReason() {
+        if (document.getElementById('reasonSelect').value !== 'custom') return '';
+        const text = currentReason();
+        if (!text || text === 'custom') return '';
+        const isNew = !DB.reasons.includes(text);
+        if (isNew) { DB.reasons.push(text); StorageAPI.save(DB); }
+        renderReasonDropdown();
+        document.getElementById('reasonSelect').value = text;
+        toggleCustom('reasonSelect', 'reasonCustom');
+        document.getElementById('reasonInput').value = '';
+        updatePreview();
+        return isNew ? text : '';
+    }
+
+    // 복사/전송 전에 비어 있는 항목 찾기 (지금 템플릿에 들어 있는 항목만 검사)
+    function missingFields() {
+        const tpl = getTemplate();
+        const used = (k) => tpl.includes('{' + k + '}');
+        const val = (id) => document.getElementById(id).value.trim();
+        const s = DB.settings || {};
+        const locMissing = (sel, nameId, addrId) => {
+            const v = val(sel);
+            if (v === 'custom') return !val(nameId) || !val(addrId);
+            return !DB.locations[v];
+        };
+        const personMissing = (sel, nameId, phoneId) => {
+            const v = val(sel);
+            if (v === 'custom') return !val(nameId) || !val(phoneId);
+            return !DB.people[v];
+        };
+        const checks = [
+            ['내이름',      '내 이름 (설정 탭)',     () => !s.senderName],
+            ['요청자',      '요청자 정보 (설정 탭)', () => !s.senderName || !s.senderPhone],
+            ['요청번호',    '요청번호 순번',         () => !val('reqNoSeq')],
+            ['날짜',        '날짜',                  () => !val('dateInput')],
+            ['배차시간',    '배차 시간',             () => !val('timeInput')],
+            ['출발지',      '출발지',                () => locMissing('departSelect', 'departName', 'departAddr')],
+            ['보내는사람',  '보내는 사람',           () => personMissing('sendPersonSelect', 'sendPersonName', 'sendPersonPhone')],
+            ['도착지',      '도착지',                () => locMissing('destSelect', 'destName', 'destAddr')],
+            ['받는사람',    '받는 사람',             () => personMissing('recvPersonSelect', 'recvPersonName', 'recvPersonPhone')],
+            ['사유',        '사유',                  () => !currentReason()],
+            ['프로젝트번호', 'Project No',           () => !val('projectNo')]
+        ];
+        const labels = checks.filter(([k, , isMissing]) => used(k) && isMissing()).map(([, label]) => label);
+        // 내이름과 요청자가 둘 다 비면 하나로 합침
+        if (labels.includes('내 이름 (설정 탭)') && labels.includes('요청자 정보 (설정 탭)')) {
+            labels.splice(labels.indexOf('내 이름 (설정 탭)'), 1);
+        }
+        return labels;
+    }
+
+    // 빈 항목이 있으면 예/아니오로 물어본 뒤 진행
+    function confirmIfMissing(actionWord, proceed) {
+        const missing = missingFields();
+        if (!missing.length) return proceed();
+        showConfirm('비어 있는 항목이 있어요', `${missing.join(', ')}\n\n그래도 ${actionWord}할까요?`, proceed);
+    }
+
+    function copyText() {
+        confirmIfMissing('복사', doCopyText);
+    }
+
+    async function doCopyText() {
+        const savedNames = autoSaveNewPeople();
+        const savedReason = autoSaveReason();
+        if (savedReason) savedNames.push('사유 "' + savedReason + '"');
+        const textarea = document.getElementById('preview');
+        const text = textarea.value;
+
+        const note = savedNames.length ? `\n\n데이터 관리에 저장됨: ${savedNames.join(', ')}` : '';
+        const successMsg = '클립보드에 복사되었습니다. (카카오톡 등에 붙여넣기 하세요)' + note;
+
+        // 최신 Clipboard API 우선 시도
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            try {
+                await navigator.clipboard.writeText(text);
+                alert(successMsg);
+                return;
+            } catch (e) { }
+        }
+
+        // 폴백: 구형 execCommand 방식
+        try {
+            textarea.select();
+            const success = document.execCommand('copy');
+            if (success) {
+                alert(successMsg);
+                return;
+            }
+        } catch (e) { }
+
+        alert('자동 복사에 실패했습니다. 미리보기 내용을 길게 눌러 직접 복사해주세요.');
+        textarea.select();
+    }
+
+    // 안드로이드 앱으로 문자 전송 기능 호출
+    function sendToApp() {
+        const phone = DB.settings.dispatcherPhone;
+
+        if(!phone) {
+            alert('설정 탭에서 배차 담당자 번호를 먼저 저장해주세요.');
+            switchTab('settings');
+            return;
+        }
+
+        confirmIfMissing('전송', () => doSendToApp(phone));
+    }
+
+    function doSendToApp(phone) {
+        autoSaveNewPeople();
+        autoSaveReason();
+        const text = document.getElementById('preview').value;
+
+        // 안드로이드 브릿지 (WebAppInterface) 호출
+        if (Native.available('sendSMS')) {
+            Native.call('sendSMS', phone, text);
+        } else if (isMobileWeb()) {
+            // 웹앱: sms: 링크로 문자 앱 열기 (아이폰은 '&body=', 안드로이드는 '?body=')
+            const num = phone.replace(/[^0-9+]/g, '');
+            location.href = 'sms:' + num + (isIOS() ? '&' : '?') + 'body=' + encodeURIComponent(text);
+        } else {
+            alert('컴퓨터에서는 문자를 보낼 수 없어요. 복사 기능을 이용해주세요.');
+        }
+    }
+
+    // ----- 웹앱(PWA) 환경 확인 -----
+    function isIOS() {
+        return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+    function isMobileWeb() {
+        return isIOS() || /Android/i.test(navigator.userAgent);
+    }
+
+    // ==========================================
+    // 7. 선택 UI (드롭다운 → 바텀시트 / 날짜 → 달력 / 시간 → 휠 피커)
+    //    원래 select/input 은 값 저장용으로 그대로 두고, 화면에 보이는 부분만 바꿈
+    // ==========================================
+    const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+    const WHEEL_H = 40;
+
+    function toISODate(d) {
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function sameDay(a, b) {
+        return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    }
+    function fireChange(el) {
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    function fieldTitle(el) {
+        const group = el.closest('.field-group');
+        const label = group && group.querySelector('label');
+        return label ? label.textContent.replace(/^\s*\d+\.\s*/, '').trim() : '선택';
+    }
+
+    function openSheet(title, bodyEl) {
+        document.getElementById('sheetTitle').textContent = title;
+        const body = document.getElementById('sheetBody');
+        body.innerHTML = '';
+        body.appendChild(bodyEl);
+        document.getElementById('sheet').classList.add('open');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeSheet() {
+        document.getElementById('sheet').classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    // --- 드롭다운: 바텀시트 목록 ---
+    function openSelectSheet(select) {
+        const list = document.createElement('div');
+        Array.from(select.options).forEach(o => {
+            const row = document.createElement('button');
+            const isSel = o.value === select.value;
+            row.className = 'sheet-row' + (isSel ? ' sel' : '') + (o.value === '' ? ' ph' : '') + (o.value === 'custom' ? ' new' : '');
+            const span = document.createElement('span');
+            span.textContent = o.textContent;
+            row.appendChild(span);
+            if (isSel) row.insertAdjacentHTML('beforeend', '<svg class="ic"><use href="#i-check"/></svg>');
+            row.onclick = () => { select.value = o.value; closeSheet(); fireChange(select); };
+            list.appendChild(row);
+        });
+        openSheet(fieldTitle(select), list);
+        const cur = list.querySelector('.sel');
+        if (cur) setTimeout(() => {
+            const body = document.getElementById('sheetBody');
+            body.scrollTop = cur.offsetTop - body.clientHeight / 2 + cur.offsetHeight / 2;
+        }, 0);
+    }
+
+    // --- 시간: 휠 피커 (오전/오후 · 시 · 분) ---
+    function wheelIndex(col) {
+        return Math.max(0, Math.min(col._count - 1, Math.round(col.scrollTop / WHEEL_H)));
+    }
+    function makeWheel(labels, index, flex) {
+        const col = document.createElement('div');
+        col.className = 'wheel';
+        col.style.flex = flex || 1;
+        col._count = labels.length;
+        labels.forEach((t, i) => {
+            const it = document.createElement('div');
+            it.className = 'wheel-item';
+            it.textContent = t;
+            it.onclick = () => col.scrollTo({ top: i * WHEEL_H, behavior: 'smooth' });
+            col.appendChild(it);
+        });
+        const mark = () => {
+            const cur = wheelIndex(col);
+            Array.from(col.children).forEach((c, n) => c.classList.toggle('on', n === cur));
+        };
+        col.addEventListener('scroll', () => requestAnimationFrame(mark));
+        setTimeout(() => { col.scrollTop = index * WHEEL_H; mark(); }, 0);
+        return col;
+    }
+    function openTimeSheet(input) {
+        const parts = (input.value || '10:00').split(':').map(Number);
+        const h24 = parts[0], mi = parts[1] || 0;
+        const wrap = document.createElement('div');
+        const wheels = document.createElement('div');
+        wheels.className = 'wheels';
+        const apW = makeWheel(['오전', '오후'], h24 >= 12 ? 1 : 0, 1.1);
+        const hW = makeWheel(Array.from({ length: 12 }, (_, i) => String(i + 1)), ((h24 % 12) || 12) - 1);
+        const mW = makeWheel(Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')), mi);
+        wheels.append(apW, hW, mW);
+        wrap.appendChild(wheels);
+
+        const foot = document.createElement('div');
+        foot.className = 'sheet-foot';
+        foot.innerHTML = '<button class="btn-secondary" data-act="cancel">취소</button><button data-act="ok">완료</button>';
+        foot.onclick = (e) => {
+            const act = e.target.closest('button') && e.target.closest('button').dataset.act;
+            if (act === 'cancel') return closeSheet();
+            if (act === 'ok') {
+                const hh = ((wheelIndex(hW) + 1) % 12) + (wheelIndex(apW) ? 12 : 0);
+                input.value = String(hh).padStart(2, '0') + ':' + String(wheelIndex(mW)).padStart(2, '0');
+                closeSheet();
+                fireChange(input);
+            }
+        };
+        wrap.appendChild(foot);
+        openSheet(fieldTitle(input), wrap);
+    }
+
+    // --- 날짜: 달력 ---
+    function openDateSheet(input) {
+        const today = new Date();
+        let sel = null;
+        if (input.value) { const p = input.value.split('-').map(Number); sel = new Date(p[0], p[1] - 1, p[2]); }
+        const base = sel || today;
+        let view = new Date(base.getFullYear(), base.getMonth(), 1);
+        const wrap = document.createElement('div');
+
+        const pick = (iso) => { input.value = iso; closeSheet(); fireChange(input); };
+
+        const render = () => {
+            const y = view.getFullYear(), m = view.getMonth();
+            const first = new Date(y, m, 1).getDay();
+            const days = new Date(y, m + 1, 0).getDate();
+            let cells = '';
+            for (let i = 0; i < first; i++) cells += '<span></span>';
+            for (let d = 1; d <= days; d++) {
+                const dt = new Date(y, m, d);
+                const cls = 'cal-day' + (dt.getDay() === 0 ? ' sun' : '') + (sameDay(dt, today) ? ' today' : '') + (sel && sameDay(dt, sel) ? ' sel' : '');
+                cells += '<button class="' + cls + '" data-day="' + toISODate(dt) + '">' + d + '</button>';
+            }
+            wrap.innerHTML =
+                '<div class="cal-head">' +
+                    '<button class="cal-nav" data-nav="-1" aria-label="이전 달"><svg class="ic"><use href="#i-chev-l"/></svg></button>' +
+                    '<div class="cal-title">' + y + '년 ' + (m + 1) + '월</div>' +
+                    '<button class="cal-nav" data-nav="1" aria-label="다음 달"><svg class="ic"><use href="#i-chev-r"/></svg></button>' +
+                '</div>' +
+                '<div class="cal-grid cal-wd">' + WEEK.map(w => '<span>' + w + '</span>').join('') + '</div>' +
+                '<div class="cal-grid">' + cells + '</div>' +
+                '<div class="sheet-foot"><button class="btn-tint" data-today="1">오늘</button></div>';
+        };
+        wrap.onclick = (e) => {
+            const b = e.target.closest('button');
+            if (!b) return;
+            if (b.dataset.nav) { view = new Date(view.getFullYear(), view.getMonth() + Number(b.dataset.nav), 1); render(); }
+            else if (b.dataset.day) pick(b.dataset.day);
+            else if (b.dataset.today) pick(toISODate(new Date()));
+        };
+        render();
+        openSheet(fieldTitle(input), wrap);
+    }
+
+    // --- 연결: 화면에 보이는 필드를 바꿔 끼움 ---
+    function wrapSelect(sel) {
+        const w = document.createElement('div');
+        w.className = 'sel-wrap';
+        sel.parentNode.insertBefore(w, sel);
+        w.appendChild(sel);
+        sel.tabIndex = -1;
+        w.addEventListener('click', () => openSelectSheet(sel));
+    }
+    function makePickField(input, iconName, format, onOpen) {
+        input.style.display = 'none';   // 값은 그대로 이 input에 저장됨
+        const f = document.createElement('div');
+        f.className = 'pick-field';
+        f.setAttribute('role', 'button');
+        f.innerHTML = '<span></span><svg class="ic"><use href="#i-' + iconName + '"/></svg>';
+        const refresh = () => { f.firstChild.textContent = input.value ? format(input.value) : '선택해주세요'; };
+        input.addEventListener('input', refresh);
+        input.addEventListener('change', refresh);
+        f.onclick = () => onOpen(input);
+        input.parentNode.insertBefore(f, input.nextSibling);
+        refresh();
+    }
+    function fmtDateKo(v) {
+        const p = v.split('-').map(Number);
+        return p[0] + '년 ' + p[1] + '월 ' + p[2] + '일 (' + WEEK[new Date(p[0], p[1] - 1, p[2]).getDay()] + ')';
+    }
+    function fmtTimeKo(v) {
+        const p = v.split(':').map(Number);
+        return (p[0] < 12 ? '오전 ' : '오후 ') + ((p[0] % 12) || 12) + ':' + String(p[1]).padStart(2, '0');
+    }
+    function initPickers() {
+        document.querySelectorAll('select').forEach(wrapSelect);
+        makePickField(document.getElementById('dateInput'), 'cal', fmtDateKo, openDateSheet);
+        makePickField(document.getElementById('timeInput'), 'clock', fmtTimeKo, openTimeSheet);
+    }
+
+    // 앱 초기화 실행
+    initDB();
+    initPickers();
+
+    // 웹앱: 연락처 가져오기는 앱(안드로이드/iOS)에서만 가능 → 버튼 숨김
+    if (!Native.available('pickContact')) document.getElementById('pickContactBtn').style.display = 'none';
+
+    // 웹앱(https 주소)일 때만: 오프라인 실행 + 자동 업데이트 준비, 저장 데이터가 지워지지 않게 요청
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+        navigator.serviceWorker.register('sw.js').catch((e) => console.error('SW 등록 실패', e));
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist();
+    }
+</script>
+</body>
+</html>
